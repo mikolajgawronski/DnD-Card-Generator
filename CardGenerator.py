@@ -72,6 +72,77 @@ class Fonts(ABC):
     FONT_DIR = ASSET_DIR / "fonts"
 
     def __init__(self):
+        parser = argparse.ArgumentParser(description="Generate D&D cards.")
+        parser.add_argument(
+            "-t",
+            "--type",
+            help="What type of cards to generate",
+            action="store",
+            default="monster",
+            choices=["monster", "item"],
+            dest="type",
+        )
+        parser.add_argument(
+            "-o",
+            "--out",
+            help="Output file path",
+            action="store",
+            default="cards.pdf",
+            dest="output_path",
+            metavar="output_path",
+            type=lambda p: pathlib.Path(p).absolute(),
+        )
+        parser.add_argument(
+            "input",
+            help="Path to input YAML file",
+            action="store",
+            type=ExistingFile,
+        )
+        parser.add_argument(
+            "-f",
+            "--fonts",
+            help="What fonts to use when generating cards",
+            action="store",
+            default="free",
+            choices=["free", "accurate"],
+            dest="fonts",
+        )
+        parser.add_argument(
+            "-b",
+            "--bleed",
+            help="How many millimeters of print bleed radius to add around each card.",
+            action="store",
+            default=0,
+            type=lambda b: float(b) * mm,
+        )
+        background_group = parser.add_mutually_exclusive_group()
+        background_group.add_argument(
+            "--no-bg",
+            help="Do not add the 'parchment' effect background.",
+            action="store_const",
+            const=None,
+            default=ASSET_DIR / "background.png",
+            dest="background",
+        )
+        background_group.add_argument(
+            "--bg",
+            help="Custom background image to use",
+            action="store",
+            dest="background",
+            type=ExistingFile,
+        )
+
+        args = parser.parse_args()
+        with open(args.input, "r") as stream:
+                try:
+                    entries = yaml.load(stream, Loader=yaml.SafeLoader)
+                except yaml.YAMLError as exc:
+                    print(exc)
+                    exit()
+
+        for entry in entries:
+            color = entry.get("kolor", "red")
+
         self._register_fonts()
         self.paragraph_styles = StyleSheet1()
         self.paragraph_styles.add(
@@ -91,7 +162,7 @@ class Fonts(ABC):
                 fontName=self.styles["subtitle"][0],
                 fontSize=self.styles["subtitle"][1] * self.FONT_SCALE,
                 textColor=self.styles["subtitle"][2],
-                backColor="red",
+                backColor=color,
                 leading=self.styles["subtitle"][1] * self.FONT_SCALE + 0.5 * mm,
                 alignment=TA_CENTER,
                 borderPadding=(0, 6),
@@ -554,7 +625,7 @@ class CardLayout(ABC):
             canvas.drawCentredString(
                 width / 2,
                 self.border_front[Border.BOTTOM] - artist_font_height - 1 * mm,
-                "Artist: {}".format(self.artist),
+                "Artysta: {}".format(self.artist),
             )
 
         canvas.restoreState()
@@ -793,7 +864,7 @@ class MonsterCardLayout(CardLayout):
         canvas.drawString(
             self.width + self.border_front[Border.LEFT],
             self.challenge_bottom,
-            "Challenge {} ({} XP)".format(
+            "Poziom Wyzwania {} ({} PD)".format(
                 self.challenge_rating, self.experience_points
             ),
         )
@@ -834,13 +905,13 @@ class MonsterCardLayout(CardLayout):
         top_stats = [
             [
                 Paragraph(
-                    "<b>AC:</b> {}<br/><b>Speed:</b> {}".format(
+                    "<b>KP:</b> {}<br/><b>Predkosc:</b> {}".format(
                         self.armor_class, self.speed
                     ),
                     self.fonts.paragraph_styles["text"],
                 ),
                 Paragraph(
-                    "<b>HP:</b> {}".format(self.max_hit_points),
+                    "<b>PW:</b> {}".format(self.max_hit_points),
                     self.fonts.paragraph_styles["text"],
                 ),
             ]
@@ -858,7 +929,7 @@ class MonsterCardLayout(CardLayout):
         self.elements.append(t)
 
         # Modifiers
-        abilities = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
+        abilities = ["SIL", "ZRC", "KON", "INT", "MDR", "CHA"]
         modifiers = [
             self.strength,
             self.dexterity,
@@ -923,7 +994,7 @@ class MonsterCardLayout(CardLayout):
         )
 
         # Actions
-        title = Paragraph("ACTIONS", self.fonts.paragraph_styles["action_title"])
+        title = Paragraph("AKCJE", self.fonts.paragraph_styles["action_title"])
         first_action = True
         for heading, body in (self.actions or {}).items():
             paragraph = Paragraph(
@@ -947,7 +1018,7 @@ class MonsterCardLayout(CardLayout):
                 )
             )
 
-            title = Paragraph("REACTIONS", self.fonts.paragraph_styles["action_title"])
+            title = Paragraph("REAKCJE", self.fonts.paragraph_styles["action_title"])
             first_reaction = True
             for heading, body in (self.reactions or {}).items():
                 paragraph = Paragraph(
@@ -971,7 +1042,7 @@ class MonsterCardLayout(CardLayout):
             )
 
             title = Paragraph(
-                "LEGENDARY ACTIONS", self.fonts.paragraph_styles["action_title"]
+                "AKCJE LEGENDARNE", self.fonts.paragraph_styles["action_title"]
             )
             first_legendary = True
             for entry in self.legendary or []:
@@ -1276,44 +1347,44 @@ if __name__ == "__main__":
 
         if args.type == "monster":
             card = MonsterCard(
-                title=entry["title"],
-                subtitle=entry["subtitle"],
-                artist=entry.get("artist", None),
+                title=entry["tytul"],
+                subtitle=entry["podtytul"],
+                artist=entry.get("artysta", None),
                 image_path=image_path or ASSET_DIR / "placeholder_monster.png",
                 background=args.background,
-                armor_class=entry["armor_class"],
-                max_hit_points=entry["max_hit_points"],
-                speed=entry["speed"],
-                strength=entry["strength"],
-                dexterity=entry["dexterity"],
-                constitution=entry["constitution"],
-                intelligence=entry["intelligence"],
-                wisdom=entry["wisdom"],
-                charisma=entry["charisma"],
-                challenge_rating=entry["challenge_rating"],
-                experience_points=entry["experience_points"],
-                source=entry["source"],
-                attributes=entry["attributes"],
-                abilities=entry.get("abilities", None),
-                actions=entry.get("actions", None),
-                reactions=entry.get("reactions", None),
-                legendary=entry.get("legendary", None),
+                armor_class=entry["klasa_pancerza"],
+                max_hit_points=entry["max_punkty_wytrzymalosci"],
+                speed=entry["predkosc"],
+                strength=entry["sila"],
+                dexterity=entry["zrecznosc"],
+                constitution=entry["kondycja"],
+                intelligence=entry["intelekt"],
+                wisdom=entry["madrosc"],
+                charisma=entry["charyzma"],
+                challenge_rating=entry["poziom_wyzwania"],
+                experience_points=entry["punkty_doswiadczenia"],
+                source=entry["zrodlo"],
+                attributes=entry["atrybuty"],
+                abilities=entry.get("zdolnosci", None),
+                actions=entry.get("akcje", None),
+                reactions=entry.get("reakcje", None),
+                legendary=entry.get("legendarne", None),
                 fonts=fonts,
-                border_color=entry.get("color", "red"),
+                border_color=entry.get("kolor", "green"),
                 bleed=args.bleed,
             )
         elif args.type == "item":
             card = ItemCard(
-                title=entry["title"],
-                subtitle=entry["subtitle"],
-                artist=entry.get("artist", None),
+                title=entry["tytul"],
+                subtitle=entry["podtytul"],
+                artist=entry.get("artysta", None),
                 image_path=image_path or ASSET_DIR / "placeholder_item.png",
                 background=args.background,
-                description=entry["description"],
-                category=entry["category"],
-                subcategory=entry.get("subcategory", None),
+                description=entry["opis"],
+                category=entry["kategoria"],
+                subcategory=entry.get("podkategoria", None),
                 fonts=fonts,
-                border_color=entry.get("color", "red"),
+                border_color=entry.get("kolor", "red"),
                 bleed=args.bleed,
             )
 
